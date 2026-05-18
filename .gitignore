@@ -1,0 +1,22 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+
+# Build artifacts
+backend/firewall-manager
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Logs and local runtime files
+*.log
+*.pid
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/settings.json

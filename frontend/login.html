@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Firewall Manager - Login</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="auth-body">
+  <div class="bg-orb bg-orb-one"></div>
+  <div class="bg-orb bg-orb-two"></div>
+  <div class="bg-grid"></div>
+
+  <main class="auth-layout">
+    <section class="hero-card reveal" style="--delay: 0ms">
+      <p class="eyebrow">Network Security Control</p>
+      <h1>Run company firewall policy from one clean control panel</h1>
+      <p class="muted">
+        Block categories, schedule rules, and monitor employee internet policy from one place.
+      </p>
+      <ul class="hero-list">
+        <li>Website and port control</li>
+        <li>Department-based policy assignment</li>
+        <li>Audit-ready activity history</li>
+      </ul>
+    </section>
+
+    <section class="auth-card reveal" style="--delay: 140ms">
+      <h2>Admin Sign In</h2>
+      <p class="muted">Use your admin credentials to continue.</p>
+
+      <form id="login-form" class="form">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="username" required>
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+        <button id="submit-btn" type="submit" class="primary-btn">Sign In</button>
+      </form>
+
+      <p id="error" class="error" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <script src="/static/login.js"></script>
+</body>
+</html>

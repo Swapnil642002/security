@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Firewall Manager - Admin Dashboard</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="dashboard-body">
+  <div class="bg-orb bg-orb-one"></div>
+  <div class="bg-orb bg-orb-two"></div>
+  <div class="bg-grid"></div>
+
+  <header class="topbar reveal" style="--delay: 0ms">
+    <div>
+      <p class="eyebrow">Admin Console</p>
+      <h1>Firewall Manager</h1>
+      <p class="muted" id="user-meta">Checking session...</p>
+    </div>
+    <div class="topbar-right">
+      <button id="notif-bell" class="notif-bell ghost-btn">
+        🔔 <span id="notif-badge" class="notif-badge" hidden>0</span>
+      </button>
+      <button id="logout" class="ghost-btn">Logout</button>
+    </div>
+  </header>
+
+  <main class="dashboard-grid">
+    <section class="metric-card reveal" style="--delay: 80ms">
+      <p class="metric-label">Managed Employees</p>
+      <p class="metric-value">60</p>
+      <p class="muted">Initial company size configured</p>
+    </section>
+
+    <section class="metric-card reveal" style="--delay: 130ms">
+      <p class="metric-label">Active Policies</p>
+      <p class="metric-value" id="metric-active-policies">0</p>
+      <p class="muted">Create your first rule set</p>
+    </section>
+
+    <section class="metric-card reveal" style="--delay: 180ms">
+      <p class="metric-label">Firewall Provider</p>
+      <p class="metric-value" id="metric-provider">Pending</p>
+      <p class="muted">Connect OPNsense or nftables</p>
+    </section>
+
+    <section class="panel panel-wide reveal" style="--delay: 230ms">
+      <h2>Firewall Status</h2>
+      <div class="status-row">
+        <p>Provider</p>
+        <strong id="status-provider">Not configured yet</strong>
+      </div>
+      <div class="status-row">
+        <p>Last Sync</p>
+        <strong id="status-last-sync">Not available</strong>
+      </div>
+      <div class="status-row">
+        <p>Pending Changes</p>
+        <strong id="status-pending">0</strong>
+      </div>
+      <div class="panel-actions">
+        <button id="sync-firewall" class="primary-btn">Sync Rules</button>
+      </div>
+      <p id="sync-message" class="muted policy-message"></p>
+      <div id="sync-output" class="sync-output" hidden></div>
+    </section>
+
+    <section class="panel reveal" style="--delay: 280ms">
+      <h2>Policy Modules</h2>
+      <ul class="clean-list">
+        <li><span>Website category blocking</span><strong id="count-website">0 rules</strong></li>
+        <li><span>Port policies</span><strong id="count-port">0 rules</strong></li>
+        <li><span>Department groups</span><strong id="count-department">0 groups</strong></li>
+      </ul>
+      <button id="jump-policy-form" class="primary-btn">Create Policy</button>
+    </section>
+
+    <section class="panel panel-wide reveal" style="--delay: 305ms" id="policy-panel">
+      <div class="panel-head">
+        <h2>Policy Management</h2>
+        <button id="refresh-policies" class="ghost-inline-btn">Refresh</button>
+      </div>
+
+      <form id="policy-form" class="policy-form">
+        <input type="hidden" id="policy-id">
+
+        <div>
+          <label for="policy-name">Policy Name</label>
+          <input id="policy-name" type="text" required placeholder="Block Social Media">
+        </div>
+
+        <div>
+          <label for="policy-type">Policy Type</label>
+          <select id="policy-type" required>
+            <option value="website_category">Website Category</option>
+            <option value="port">Port</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="policy-action">Action</label>
+          <select id="policy-action" required>
+            <option value="block">Block</option>
+            <option value="allow">Allow</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="policy-target">Target</label>
+          <input id="policy-target" type="text" required placeholder="social_media or 443/tcp">
+        </div>
+
+        <div>
+          <label for="policy-department">Department (optional)</label>
+          <input id="policy-department" type="text" placeholder="Sales">
+        </div>
+
+        <div>
+          <label for="policy-enabled">Enabled</label>
+          <select id="policy-enabled">
+            <option value="true">Enabled</option>
+            <option value="false">Disabled</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="policy-schedule">Schedule JSON</label>
+          <textarea id="policy-schedule" rows="3" placeholder='{"timezone":"UTC","days":["mon","tue"],"start":"09:00","end":"18:00"}'>{}</textarea>
+        </div>
+
+        <div class="policy-actions">
+          <button id="policy-submit" type="submit" class="primary-btn">Create Policy</button>
+          <button id="policy-cancel" type="button" class="ghost-inline-btn" hidden>Cancel Edit</button>
+        </div>
+      </form>
+
+      <p id="policy-message" class="muted policy-message"></p>
+
+      <div class="policy-table-wrap">
+        <table class="policy-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Action</th>
+              <th>Target</th>
+              <th>Department</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="policy-table-body">
+            <tr>
+              <td colspan="7" class="muted">No policies yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal" style="--delay: 318ms" id="department-panel">
+      <div class="panel-head">
+        <h2>Departments</h2>
+        <button id="refresh-departments" class="ghost-inline-btn">Refresh</button>
+      </div>
+
+      <form id="department-form" class="mini-form">
+        <input id="department-name" type="text" placeholder="Engineering" required>
+        <input id="department-description" type="text" placeholder="Optional description">
+        <button type="submit" class="primary-btn">Add Department</button>
+      </form>
+
+      <p id="department-message" class="muted policy-message"></p>
+      <ul id="department-list" class="chip-list">
+        <li class="muted">No departments yet.</li>
+      </ul>
+    </section>
+
+    <section class="panel panel-wide reveal" style="--delay: 325ms" id="laptop-panel">
+      <div class="panel-head">
+        <h2>Employee Laptops</h2>
+        <button id="refresh-laptops" class="ghost-inline-btn">Refresh</button>
+      </div>
+
+      <form id="laptop-form" class="policy-form">
+        <div>
+          <label for="laptop-hostname">Hostname</label>
+          <input id="laptop-hostname" type="text" required placeholder="LAPTOP-ALICE">
+        </div>
+        <div>
+          <label for="laptop-os">OS</label>
+          <select id="laptop-os">
+            <option value="windows">Windows</option>
+            <option value="macos">macOS</option>
+            <option value="linux">Linux</option>
+          </select>
+        </div>
+        <div>
+          <label for="laptop-employee-name">Employee Name</label>
+          <input id="laptop-employee-name" type="text" required placeholder="Alice Kumar">
+        </div>
+        <div>
+          <label for="laptop-employee-email">Employee Email</label>
+          <input id="laptop-employee-email" type="email" required placeholder="alice@company.com">
+        </div>
+        <div>
+          <label for="laptop-department">Department</label>
+          <select id="laptop-department">
+            <option value="">None</option>
+          </select>
+        </div>
+        <div>
+          <label for="laptop-active">Status</label>
+          <select id="laptop-active">
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+          </select>
+        </div>
+        <div class="policy-actions">
+          <button type="submit" class="primary-btn">Add Laptop</button>
+        </div>
+      </form>
+
+      <p id="laptop-message" class="muted policy-message"></p>
+      <div class="policy-table-wrap">
+        <table class="policy-table">
+          <thead>
+            <tr>
+              <th>Hostname</th>
+              <th>Employee</th>
+              <th>Email</th>
+              <th>OS</th>
+              <th>Department</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="laptop-table-body">
+            <tr>
+              <td colspan="6" class="muted">No laptops yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel panel-wide reveal" style="--delay: 336ms" id="assignment-panel">
+      <div class="panel-head">
+        <h2>Policy Assignment</h2>
+      </div>
+      <form id="assignment-form" class="policy-form">
+        <div>
+          <label for="assign-policy">Policy</label>
+          <select id="assign-policy"></select>
+        </div>
+        <div>
+          <label for="assign-type">Assignment Type</label>
+          <select id="assign-type">
+            <option value="department">Department</option>
+            <option value="laptop">Laptop</option>
+          </select>
+        </div>
+        <div id="assign-department-wrap">
+          <label for="assign-department">Department</label>
+          <select id="assign-department"></select>
+        </div>
+        <div id="assign-laptop-wrap" hidden>
+          <label for="assign-laptop">Laptop</label>
+          <select id="assign-laptop"></select>
+        </div>
+        <div>
+          <label for="assign-enabled">Enabled</label>
+          <select id="assign-enabled">
+            <option value="true">Enabled</option>
+            <option value="false">Disabled</option>
+          </select>
+        </div>
+        <div class="policy-actions">
+          <button type="submit" class="primary-btn">Assign Policy</button>
+        </div>
+      </form>
+      <p id="assignment-message" class="muted policy-message"></p>
+    </section>
+
+    <section class="panel panel-wide reveal" style="--delay: 345ms" id="enrollment-panel">
+      <div class="panel-head">
+        <h2>Device Enrollment Control</h2>
+        <button id="refresh-enrollments" class="ghost-inline-btn">Refresh</button>
+      </div>
+
+      <div class="enroll-generate">
+        <form id="enroll-link-form" class="mini-form">
+          <input id="enroll-expires" type="number" min="1" max="168" value="48" placeholder="Expires (hours)">
+          <input id="enroll-max-uses" type="number" min="1" max="50" value="1" placeholder="Max uses">
+          <button type="submit" class="primary-btn">Generate Enrollment Link</button>
+        </form>
+        <p id="enroll-link-message" class="muted policy-message"></p>
+        <div id="enroll-link-output" class="sync-output" hidden></div>
+      </div>
+
+      <h3 style="margin: 16px 0 8px; font-size: 0.9rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;">Pending Device Requests</h3>
+      <div class="policy-table-wrap">
+        <table class="policy-table">
+          <thead>
+            <tr>
+              <th>Hostname</th>
+              <th>Employee</th>
+              <th>Email</th>
+              <th>OS</th>
+              <th>IP</th>
+              <th>Requested</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="enrollment-table-body">
+            <tr><td colspan="8" class="muted">No pending requests.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p id="enrollment-message" class="muted policy-message"></p>
+    </section>
+
+    <section class="panel reveal" style="--delay: 355ms">
+      <div class="panel-head">
+        <h2>Notifications</h2>
+        <button id="refresh-notifications" class="ghost-inline-btn">Refresh</button>
+      </div>
+      <div id="notif-list">
+        <div class="timeline-item"><p class="muted">No notifications yet.</p></div>
+      </div>
+    </section>
+
+    <section class="panel reveal" style="--delay: 330ms">
+      <h2>Audit Activity</h2>
+      <div id="audit-list">
+        <div class="timeline-item">
+          <p class="muted">No audit records yet.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/admin.js"></script>
+</body>
+</html>
