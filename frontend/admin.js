@@ -102,6 +102,14 @@
     return { Authorization: "Bearer " + token };
   }
 
+  function isAuthStatus(status) {
+    return status === 401 || status === 403;
+  }
+
+  function isAuthError(err) {
+    return !!(err && isAuthStatus(err.status));
+  }
+
   function escapeHtml(value) {
     return String(value || "")
       .replace(/&/g, "&amp;")
@@ -163,7 +171,9 @@
     const resp = await fetch(path, Object.assign({}, requestOptions, { headers: headers }));
     if (!resp.ok) {
       const text = (await resp.text()).trim();
-      throw new Error(text || "request failed");
+      const err = new Error(text || "request failed");
+      err.status = resp.status;
+      throw err;
     }
     return resp;
   }
@@ -298,9 +308,15 @@
     }
     const resp = await fetch("/api/v1/auth/me", { headers: authHeader(token) });
     if (!resp.ok) {
-      localStorage.removeItem(TOKEN_KEY);
-      redirectToLogin();
-      return;
+      if (isAuthStatus(resp.status)) {
+        localStorage.removeItem(TOKEN_KEY);
+        redirectToLogin();
+        return;
+      }
+      const text = (await resp.text()).trim();
+      const err = new Error(text || "failed to load current user");
+      err.status = resp.status;
+      throw err;
     }
     const body = await resp.json();
     const user = body.user;
@@ -693,8 +709,13 @@
   toggleAssignmentInputs();
   resetPolicyForm();
 
-  Promise.all([loadCurrentUser(), loadDashboardSummary(), loadPolicies(), loadDepartments(), loadLaptops(), loadEnrollments(), loadNotifications()]).catch(function () {
-    localStorage.removeItem(TOKEN_KEY);
-    redirectToLogin();
+  Promise.all([loadCurrentUser(), loadDashboardSummary(), loadPolicies(), loadDepartments(), loadLaptops(), loadEnrollments(), loadNotifications()]).catch(function (err) {
+    if (isAuthError(err)) {
+      localStorage.removeItem(TOKEN_KEY);
+      redirectToLogin();
+      return;
+    }
+    console.error(err);
+    el.userMeta.textContent = "Signed in, but some dashboard data failed to load.";
   });
 })();
