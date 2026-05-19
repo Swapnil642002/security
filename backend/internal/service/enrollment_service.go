@@ -116,7 +116,7 @@ func (s *EnrollmentService) ApproveEnrollment(ctx context.Context, actorUserID, 
 		return models.DeviceEnrollment{}, ErrConsentRequired
 	}
 
-	laptop, err := s.fleetRepo.CreateLaptop(ctx, models.EmployeeLaptop{
+	laptop, err := s.fleetRepo.UpsertLaptopByHostname(ctx, models.EmployeeLaptop{
 		Hostname:      enrollment.Hostname,
 		EmployeeName:  enrollment.EmployeeName,
 		EmployeeEmail: enrollment.EmployeeEmail,

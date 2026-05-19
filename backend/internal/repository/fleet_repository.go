@@ -116,6 +116,46 @@ func (r *FleetRepository) CreateLaptop(ctx context.Context, l models.EmployeeLap
 	return out, err
 }
 
+func (r *FleetRepository) UpsertLaptopByHostname(ctx context.Context, l models.EmployeeLaptop) (models.EmployeeLaptop, error) {
+	const q = `
+		INSERT INTO employee_laptops (hostname, employee_name, employee_email, os_type, department_id, is_active)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (hostname)
+		DO UPDATE
+		SET employee_name = EXCLUDED.employee_name,
+		    employee_email = EXCLUDED.employee_email,
+		    os_type = EXCLUDED.os_type,
+		    department_id = EXCLUDED.department_id,
+		    is_active = EXCLUDED.is_active,
+		    updated_at = NOW()
+		RETURNING id, hostname, employee_name, employee_email, os_type, department_id,
+		          is_active, last_seen_at, created_at, updated_at`
+
+	var out models.EmployeeLaptop
+	err := r.pool.QueryRow(
+		ctx,
+		q,
+		strings.TrimSpace(l.Hostname),
+		strings.TrimSpace(l.EmployeeName),
+		strings.ToLower(strings.TrimSpace(l.EmployeeEmail)),
+		l.OSType,
+		l.DepartmentID,
+		l.IsActive,
+	).Scan(
+		&out.ID,
+		&out.Hostname,
+		&out.EmployeeName,
+		&out.EmployeeEmail,
+		&out.OSType,
+		&out.DepartmentID,
+		&out.IsActive,
+		&out.LastSeenAt,
+		&out.CreatedAt,
+		&out.UpdatedAt,
+	)
+	return out, err
+}
+
 func (r *FleetRepository) CreatePolicyAssignment(ctx context.Context, a models.PolicyAssignment) (models.PolicyAssignment, error) {
 	const q = `
 		INSERT INTO policy_assignments (policy_id, assignment_type, department_id, laptop_id, is_enabled)
