@@ -59,7 +59,11 @@ func Load() (Config, error) {
 	}
 	cfg.JWTTTL = time.Duration(mins) * time.Minute
 
-	dryRunRaw := getEnv("FIREWALL_DRY_RUN", "true")
+	dryRunDefault := "true"
+	if strings.EqualFold(cfg.AppEnv, "production") {
+		dryRunDefault = "false"
+	}
+	dryRunRaw := getEnv("FIREWALL_DRY_RUN", dryRunDefault)
 	dryRun, err := strconv.ParseBool(dryRunRaw)
 	if err != nil {
 		return Config{}, fmt.Errorf("FIREWALL_DRY_RUN must be true or false")

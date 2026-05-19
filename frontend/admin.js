@@ -478,7 +478,16 @@
         }),
       });
 
-      await apiRequest("/api/v1/firewall/sync", { method: "POST" });
+      const syncResp = await apiRequest("/api/v1/firewall/sync", { method: "POST" });
+      const syncBody = await syncResp.json();
+      const syncResult = syncBody.result || {};
+      if (syncResult.dry_run) {
+        throw new Error("Firewall sync ran in dry-run mode. Set FIREWALL_DRY_RUN=false and retry.");
+      }
+      if ((syncResult.applied || 0) <= 0) {
+        throw new Error("No firewall rules were applied. Check provider configuration and sync warnings.");
+      }
+
       setMessage(el.enrollmentMessage, "Port " + target + " blocked for " + row.hostname + ".", false);
     } else if (action === "disable") {
       await apiRequest("/api/v1/enrollments/" + enrollmentID + "/disable", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
