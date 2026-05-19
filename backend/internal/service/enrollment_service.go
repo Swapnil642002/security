@@ -16,6 +16,7 @@ import (
 var (
 	ErrPermissionRequired = errors.New("admin or manager approval required")
 	ErrInvalidLink        = errors.New("invalid or expired enrollment link")
+	ErrConsentRequired    = errors.New("employee consent is required before approval")
 )
 
 type EnrollmentService struct {
@@ -54,7 +55,7 @@ func (s *EnrollmentService) GenerateEnrollmentLink(ctx context.Context, actorUse
 	if err != nil {
 		return models.EnrollmentLink{}, "", err
 	}
-	joinURL := fmt.Sprintf("%s/login?enroll_token=%s", s.appBaseURL, token)
+	joinURL := fmt.Sprintf("%s/enroll?token=%s", s.appBaseURL, token)
 	_, _ = s.enrollRepo.InsertNotification(ctx, models.SystemNotification{Type: "enrollment.link.created", Message: "New enrollment link generated", TargetRole: "admin"})
 	return link, joinURL, nil
 }
@@ -75,6 +76,9 @@ func (s *EnrollmentService) AcceptEnrollment(ctx context.Context, token string, 
 	payload.EmployeeEmail = strings.ToLower(strings.TrimSpace(payload.EmployeeEmail))
 	if payload.Hostname == "" || payload.EmployeeName == "" || payload.EmployeeEmail == "" {
 		return models.DeviceEnrollment{}, errors.New("hostname, employee_name, and employee_email are required")
+	}
+	if !payload.Permission {
+		return models.DeviceEnrollment{}, ErrConsentRequired
 	}
 
 	enrollment, err := s.enrollRepo.CreateEnrollment(ctx, payload)
@@ -107,6 +111,9 @@ func (s *EnrollmentService) ApproveEnrollment(ctx context.Context, actorUserID, 
 	}
 	if enrollment.Status != "pending" {
 		return models.DeviceEnrollment{}, errors.New("only pending enrollments can be approved")
+	}
+	if !enrollment.Permission {
+		return models.DeviceEnrollment{}, ErrConsentRequired
 	}
 
 	laptop, err := s.fleetRepo.CreateLaptop(ctx, models.EmployeeLaptop{
@@ -141,10 +148,17 @@ func (s *EnrollmentService) DisableEnrollment(ctx context.Context, actorUserID, 
 	if err := s.ensureApprover(ctx, actorUserID); err != nil {
 		return err
 	}
+	enrollment, err := s.enrollRepo.GetEnrollmentByID(ctx, enrollmentID)
+	if err != nil {
+		return err
+	}
 	if err := s.enrollRepo.DisableEnrollment(ctx, enrollmentID, actorUserID); err != nil {
 		return err
 	}
-	enrollment, _ := s.enrollRepo.GetEnrollmentByID(ctx, enrollmentID)
+	if enrollment.LaptopID != nil {
+		_ = s.fleetRepo.SetLaptopActive(ctx, *enrollment.LaptopID, false)
+	}
+	enrollment, _ = s.enrollRepo.GetEnrollmentByID(ctx, enrollmentID)
 	_, _ = s.enrollRepo.InsertNotification(ctx, models.SystemNotification{
 		Type:       "enrollment.disabled",
 		Message:    fmt.Sprintf("Device %s access was disabled by approver", enrollment.Hostname),

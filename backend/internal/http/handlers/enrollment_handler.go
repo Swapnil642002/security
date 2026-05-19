@@ -36,6 +36,7 @@ type acceptEnrollmentRequest struct {
 	OSType        string `json:"os_type"`
 	CurrentIP     string `json:"current_ip"`
 	Fingerprint   string `json:"fingerprint"`
+	Permission    bool   `json:"permission"`
 }
 
 type approveEnrollmentRequest struct {
@@ -67,6 +68,9 @@ func (h *EnrollmentHandler) AcceptPublic(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	if req.Token == "" {
+		req.Token = r.URL.Query().Get("token")
+	}
 	item, err := h.enrollSvc.AcceptEnrollment(r.Context(), req.Token, models.DeviceEnrollment{
 		Hostname:      req.Hostname,
 		EmployeeName:  req.EmployeeName,
@@ -74,6 +78,7 @@ func (h *EnrollmentHandler) AcceptPublic(w http.ResponseWriter, r *http.Request)
 		OSType:        req.OSType,
 		CurrentIP:     req.CurrentIP,
 		Fingerprint:   req.Fingerprint,
+		Permission:    req.Permission,
 	})
 	if err != nil {
 		handleEnrollmentError(w, err)
@@ -157,6 +162,8 @@ func handleEnrollmentError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, service.ErrPermissionRequired):
 		http.Error(w, err.Error(), http.StatusForbidden)
+	case errors.Is(err, service.ErrConsentRequired):
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	case errors.Is(err, service.ErrInvalidLink):
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	case errors.Is(err, repository.ErrEnrollmentNotFound):

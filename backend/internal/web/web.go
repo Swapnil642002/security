@@ -32,6 +32,11 @@ func (a *App) AdminPage(w http.ResponseWriter, r *http.Request) {
 	a.staticHandler.ServeHTTP(w, r)
 }
 
+func (a *App) EnrollPage(w http.ResponseWriter, r *http.Request) {
+	r.URL.Path = "/enroll.html"
+	a.staticHandler.ServeHTTP(w, r)
+}
+
 func (a *App) Static(w http.ResponseWriter, r *http.Request) {
 	cleanPath := strings.TrimPrefix(r.URL.Path, "/static/")
 	r.URL.Path = "/" + cleanPath

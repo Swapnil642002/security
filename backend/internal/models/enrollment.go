@@ -24,6 +24,7 @@ type DeviceEnrollment struct {
 	OSType        string     `json:"os_type"`
 	CurrentIP     string     `json:"current_ip"`
 	Fingerprint   string     `json:"fingerprint"`
+	Permission    bool       `json:"permission"`
 	LaptopID      *int64     `json:"laptop_id"`
 	ApprovedBy    *int64     `json:"approved_by"`
 	ApprovedAt    *time.Time `json:"approved_at"`

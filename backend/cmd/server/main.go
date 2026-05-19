@@ -31,6 +31,10 @@ func main() {
 	}
 	defer pool.Close()
 
+	if err := database.RunMigrations(ctx, pool); err != nil {
+		log.Fatalf("migration error: %v", err)
+	}
+
 	userRepo := repository.NewUserRepository(pool)
 	dashboardRepo := repository.NewDashboardRepository(pool)
 	policyRepo := repository.NewPolicyRepository(pool)

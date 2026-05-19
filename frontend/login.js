@@ -14,6 +14,13 @@
   }
 
   async function bootstrapSessionCheck() {
+    const params = new URLSearchParams(window.location.search);
+    const enrollToken = params.get("enroll_token") || params.get("token");
+    if (enrollToken) {
+      window.location.replace("/enroll?token=" + encodeURIComponent(enrollToken));
+      return;
+    }
+
     const existing = localStorage.getItem(TOKEN_KEY);
     if (!existing) {
       return;

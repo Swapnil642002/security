@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Firewall Manager - Device Enrollment</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="auth-body">
+  <div class="bg-orb bg-orb-one"></div>
+  <div class="bg-orb bg-orb-two"></div>
+  <div class="bg-grid"></div>
+
+  <main class="auth-layout">
+    <section class="hero-card reveal" style="--delay: 0ms">
+      <p class="eyebrow">Secure Enrollment</p>
+      <h1>Register your laptop for policy-controlled access</h1>
+      <p class="muted">Your admin will review and approve this request before activating access.</p>
+      <ul class="hero-list">
+        <li>Fast approval workflow</li>
+        <li>Managed security policy assignment</li>
+        <li>Centralized access control</li>
+      </ul>
+    </section>
+
+    <section class="auth-card reveal" style="--delay: 120ms">
+      <h2>Device Enrollment Form</h2>
+      <p class="muted">Fill all details and provide consent to continue.</p>
+
+      <form id="enroll-form" class="form">
+        <label for="hostname">Device Hostname</label>
+        <input type="text" id="hostname" name="hostname" required>
+
+        <label for="employee_name">Your Name</label>
+        <input type="text" id="employee_name" name="employee_name" required>
+
+        <label for="employee_email">Your Email</label>
+        <input type="email" id="employee_email" name="employee_email" required>
+
+        <label for="os_type">Operating System</label>
+        <select id="os_type" name="os_type" required>
+          <option value="windows">Windows</option>
+          <option value="macos">macOS</option>
+          <option value="linux">Linux</option>
+        </select>
+
+        <label class="consent-check">
+          <input type="checkbox" id="permission" name="permission" required>
+          I authorize admin to manage policy access for this laptop.
+        </label>
+
+        <button id="enroll-submit" type="submit" class="primary-btn">Submit Request</button>
+      </form>
+
+      <p id="enroll-error" class="error" aria-live="polite"></p>
+      <p id="enroll-success" class="success" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <script src="/static/enroll.js"></script>
+</body>
+</html>

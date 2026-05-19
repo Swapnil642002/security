@@ -134,6 +134,15 @@ func (r *FleetRepository) CreatePolicyAssignment(ctx context.Context, a models.P
 	return out, err
 }
 
+func (r *FleetRepository) SetLaptopActive(ctx context.Context, laptopID int64, isActive bool) error {
+	const q = `
+		UPDATE employee_laptops
+		SET is_active = $1, updated_at = NOW()
+		WHERE id = $2`
+	_, err := r.pool.Exec(ctx, q, isActive, laptopID)
+	return err
+}
+
 func (r *FleetRepository) ListPolicyAssignments(ctx context.Context, policyID int64) ([]models.PolicyAssignment, error) {
 	const q = `
 		SELECT id, policy_id, assignment_type, department_id, laptop_id, is_enabled, created_at

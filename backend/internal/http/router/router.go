@@ -31,6 +31,7 @@ func New(authHandler *handlers.AuthHandler, dashboardHandler *handlers.Dashboard
 	})
 	r.Get("/login", webApp.LoginPage)
 	r.Get("/admin", webApp.AdminPage)
+	r.Get("/enroll", webApp.EnrollPage)
 	r.Get("/static/*", webApp.Static)
 
 	r.Route("/api/v1", func(api chi.Router) {

@@ -377,7 +377,7 @@
 
   function renderEnrollments(items) {
     if (!Array.isArray(items) || items.length === 0) {
-      el.enrollmentTableBody.innerHTML = '<tr><td colspan="8" class="muted">No enrollment requests yet.</td></tr>';
+      el.enrollmentTableBody.innerHTML = '<tr><td colspan="9" class="muted">No enrollment requests yet.</td></tr>';
       return;
     }
     el.enrollmentTableBody.innerHTML = items
@@ -385,11 +385,16 @@
         const isPending = item.status === "pending";
         const isApproved = item.status === "approved";
         const statusClass = isPending ? "status-pill disabled" : (isApproved ? "status-pill enabled" : "status-pill disabled");
+        const hasConsent = !!item.permission;
+        const consentPill = hasConsent
+          ? '<span class="status-pill enabled">Granted</span>'
+          : '<span class="status-pill disabled">Missing</span>';
         const actions = isPending
-          ? '<button class="approve-btn" data-action="approve" data-id="' + item.id + '">Approve</button>' +
+          ? '<button class="approve-btn" data-action="approve" data-id="' + item.id + '" ' + (hasConsent ? "" : "disabled") + '>Approve</button>' +
             ' <button class="disable-btn" data-action="reject" data-id="' + item.id + '">Reject</button>'
           : isApproved
-            ? '<button class="disable-btn" data-action="disable" data-id="' + item.id + '">Disable</button>'
+            ? '<button class="approve-btn" data-action="block-port" data-id="' + item.id + '" data-laptop-id="' + (item.laptop_id || "") + '">Block Port</button>' +
+              ' <button class="disable-btn" data-action="disable" data-id="' + item.id + '">Disable</button>'
             : '<span class="muted">—</span>';
         return (
           "<tr>" +
@@ -397,6 +402,7 @@
           "<td>" + escapeHtml(item.employee_name) + "</td>" +
           "<td>" + escapeHtml(item.employee_email) + "</td>" +
           "<td>" + escapeHtml(titleCase(item.os_type)) + "</td>" +
+          "<td>" + consentPill + "</td>" +
           "<td>" + escapeHtml(item.current_ip || "—") + "</td>" +
           "<td>" + formatDate(item.created_at) + "</td>" +
           '<td><span class="' + statusClass + '">' + escapeHtml(titleCase(item.status)) + "</span></td>" +
@@ -431,6 +437,49 @@
         : "/api/v1/enrollments/" + enrollmentID + "/disable";
       await apiRequest(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       setMessage(el.enrollmentMessage, action === "approve" ? "Device approved and added to fleet." : "Request rejected.", false);
+    } else if (action === "block-port") {
+      const row = state.enrollments.find(function (entry) {
+        return String(entry.id) === String(enrollmentID);
+      });
+      if (!row || !row.laptop_id) {
+        throw new Error("Laptop not linked yet; approve the request first.");
+      }
+
+      const rawPort = window.prompt("Enter port/protocol to block (example: 445/tcp)");
+      const target = (rawPort || "").trim();
+      if (!target) {
+        throw new Error("Port block canceled");
+      }
+
+      const policyResp = await apiRequest("/api/v1/policies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Auto Block " + target + " - " + row.hostname,
+          policy_type: "port",
+          action: "block",
+          target: target,
+          department: "",
+          schedule_json: "{}",
+          is_enabled: true,
+        }),
+      });
+      const createdPolicy = (await policyResp.json()).item;
+
+      await apiRequest("/api/v1/policy-assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          policy_id: Number(createdPolicy.id),
+          assignment_type: "laptop",
+          laptop_id: Number(row.laptop_id),
+          department_id: null,
+          is_enabled: true,
+        }),
+      });
+
+      await apiRequest("/api/v1/firewall/sync", { method: "POST" });
+      setMessage(el.enrollmentMessage, "Port " + target + " blocked for " + row.hostname + ".", false);
     } else if (action === "disable") {
       await apiRequest("/api/v1/enrollments/" + enrollmentID + "/disable", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       setMessage(el.enrollmentMessage, "Device access disabled.", false);
@@ -686,9 +735,15 @@
     const id = button.getAttribute("data-id");
     const action = button.getAttribute("data-action");
     if (!id || !action) { return; }
-    const confirmMsg = action === "approve" ? "Approve this device for policy control?" : action === "disable" ? "Disable this device's access?" : "Reject this enrollment request?";
-    if (!window.confirm(confirmMsg)) { return; }
+    if (action !== "block-port") {
+      const confirmMsg = action === "approve" ? "Approve this device for policy control?" : action === "disable" ? "Disable this device's access?" : "Reject this enrollment request?";
+      if (!window.confirm(confirmMsg)) { return; }
+    }
     handleEnrollmentAction(id, action).catch(function (err) {
+      if (action === "block-port" && /canceled/i.test(err.message || "")) {
+        setMessage(el.enrollmentMessage, "Port block canceled.", false);
+        return;
+      }
       setMessage(el.enrollmentMessage, err.message || "Action failed", true);
     });
   });

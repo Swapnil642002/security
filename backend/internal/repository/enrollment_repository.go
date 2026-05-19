@@ -73,12 +73,12 @@ func (r *EnrollmentRepository) IncrementLinkUsage(ctx context.Context, linkID in
 
 func (r *EnrollmentRepository) CreateEnrollment(ctx context.Context, e models.DeviceEnrollment) (models.DeviceEnrollment, error) {
 	const q = `
-		INSERT INTO device_enrollments (link_id, status, hostname, employee_name, employee_email, os_type, current_ip, fingerprint)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id, link_id, status, hostname, employee_name, employee_email, os_type, current_ip, fingerprint,
+		INSERT INTO device_enrollments (link_id, status, hostname, employee_name, employee_email, os_type, current_ip, fingerprint, permission)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, link_id, status, hostname, employee_name, employee_email, os_type, current_ip, fingerprint, permission,
 		          laptop_id, approved_by, approved_at, disabled_by, disabled_at, created_at, updated_at`
 	var out models.DeviceEnrollment
-	err := r.pool.QueryRow(ctx, q, e.LinkID, e.Status, e.Hostname, e.EmployeeName, e.EmployeeEmail, e.OSType, e.CurrentIP, e.Fingerprint).Scan(
+	err := r.pool.QueryRow(ctx, q, e.LinkID, e.Status, e.Hostname, e.EmployeeName, e.EmployeeEmail, e.OSType, e.CurrentIP, e.Fingerprint, e.Permission).Scan(
 		&out.ID,
 		&out.LinkID,
 		&out.Status,
@@ -88,6 +88,7 @@ func (r *EnrollmentRepository) CreateEnrollment(ctx context.Context, e models.De
 		&out.OSType,
 		&out.CurrentIP,
 		&out.Fingerprint,
+		&out.Permission,
 		&out.LaptopID,
 		&out.ApprovedBy,
 		&out.ApprovedAt,
@@ -101,7 +102,7 @@ func (r *EnrollmentRepository) CreateEnrollment(ctx context.Context, e models.De
 
 func (r *EnrollmentRepository) ListEnrollments(ctx context.Context, status string) ([]models.DeviceEnrollment, error) {
 	base := `
-		SELECT id, link_id, status, hostname, employee_name, employee_email, os_type, current_ip, fingerprint,
+		SELECT id, link_id, status, hostname, employee_name, employee_email, os_type, current_ip, fingerprint, permission,
 		       laptop_id, approved_by, approved_at, disabled_by, disabled_at, created_at, updated_at
 		FROM device_enrollments`
 	var rows pgx.Rows
@@ -129,6 +130,7 @@ func (r *EnrollmentRepository) ListEnrollments(ctx context.Context, status strin
 			&out.OSType,
 			&out.CurrentIP,
 			&out.Fingerprint,
+			&out.Permission,
 			&out.LaptopID,
 			&out.ApprovedBy,
 			&out.ApprovedAt,
@@ -146,7 +148,7 @@ func (r *EnrollmentRepository) ListEnrollments(ctx context.Context, status strin
 
 func (r *EnrollmentRepository) GetEnrollmentByID(ctx context.Context, id int64) (models.DeviceEnrollment, error) {
 	const q = `
-		SELECT id, link_id, status, hostname, employee_name, employee_email, os_type, current_ip, fingerprint,
+		SELECT id, link_id, status, hostname, employee_name, employee_email, os_type, current_ip, fingerprint, permission,
 		       laptop_id, approved_by, approved_at, disabled_by, disabled_at, created_at, updated_at
 		FROM device_enrollments
 		WHERE id = $1`
@@ -161,6 +163,7 @@ func (r *EnrollmentRepository) GetEnrollmentByID(ctx context.Context, id int64) 
 		&out.OSType,
 		&out.CurrentIP,
 		&out.Fingerprint,
+		&out.Permission,
 		&out.LaptopID,
 		&out.ApprovedBy,
 		&out.ApprovedAt,

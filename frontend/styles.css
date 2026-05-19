@@ -171,11 +171,26 @@ input {
   transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
+select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 12px 13px;
+  font: inherit;
+  background: #fff;
+}
+
 input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.18);
   transform: translateY(-1px);
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.18);
 }
 
 .primary-btn,
@@ -238,6 +253,25 @@ input:focus {
   margin-top: 10px;
   color: var(--danger);
   font-weight: 600;
+}
+
+.success {
+  min-height: 1.2rem;
+  margin-top: 8px;
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.consent-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.88rem;
+}
+
+.consent-check input {
+  width: auto;
+  margin-top: 3px;
 }
 
 .muted {
