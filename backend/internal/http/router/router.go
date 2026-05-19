@@ -36,6 +36,8 @@ func New(authHandler *handlers.AuthHandler, dashboardHandler *handlers.Dashboard
 
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Post("/public/enroll/accept", enrollmentHandler.AcceptPublic)
+		api.Post("/public/agent/commands/next", fleetHandler.AgentClaimNextCommand)
+		api.Post("/public/agent/commands/{commandID}/result", fleetHandler.AgentReportCommandResult)
 
 		api.Route("/auth", func(authRoutes chi.Router) {
 			authRoutes.Post("/bootstrap-admin", authHandler.BootstrapAdmin)
@@ -60,6 +62,8 @@ func New(authHandler *handlers.AuthHandler, dashboardHandler *handlers.Dashboard
 			protected.Post("/departments", fleetHandler.CreateDepartment)
 			protected.Get("/laptops", fleetHandler.ListLaptops)
 			protected.Post("/laptops", fleetHandler.CreateLaptop)
+			protected.Post("/laptops/{laptopID}/usb/block", fleetHandler.QueueUSBBlock)
+			protected.Post("/laptops/{laptopID}/usb/unblock", fleetHandler.QueueUSBUnblock)
 			protected.Post("/policy-assignments", fleetHandler.CreatePolicyAssignment)
 			protected.Get("/policies/{policyID}/assignments", fleetHandler.ListPolicyAssignments)
 			protected.Get("/policies", policyHandler.List)

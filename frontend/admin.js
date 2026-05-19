@@ -230,12 +230,16 @@
 
   function renderLaptops(items) {
     if (!Array.isArray(items) || items.length === 0) {
-      el.laptopTableBody.innerHTML = '<tr><td colspan="6" class="muted">No laptops yet.</td></tr>';
+      el.laptopTableBody.innerHTML = '<tr><td colspan="8" class="muted">No laptops yet.</td></tr>';
       return;
     }
     el.laptopTableBody.innerHTML = items
       .map(function (item) {
         const dept = getDepartmentName(item.department_id) || "-";
+        const usbState = item.usb_storage_blocked
+          ? '<span class="status-pill disabled">Blocked</span>'
+          : '<span class="status-pill enabled">Allowed</span>';
+        const tokenShort = item.agent_token ? item.agent_token.slice(0, 12) + "..." : "missing";
         return (
           "<tr>" +
           "<td>" + escapeHtml(item.hostname) + "</td>" +
@@ -244,10 +248,23 @@
           "<td>" + escapeHtml(titleCase(item.os_type)) + "</td>" +
           "<td>" + escapeHtml(dept) + "</td>" +
           '<td><span class="status-pill ' + (item.is_active ? "enabled" : "disabled") + '">' + (item.is_active ? "Active" : "Inactive") + "</span></td>" +
+          "<td>" + usbState + '<div class="table-actions" style="margin-top:6px;">' +
+            '<button class="tiny-btn" data-action="usb-block" data-id="' + item.id + '">Block USB</button>' +
+            '<button class="tiny-btn" data-action="usb-unblock" data-id="' + item.id + '">Unblock USB</button>' +
+          "</div></td>" +
+          "<td><div style=\"font-family:monospace;font-size:0.78rem;\">" + escapeHtml(tokenShort) + "</div>" +
+          '<button class="tiny-btn" data-action="copy-token" data-token="' + escapeHtml(item.agent_token || "") + '">Copy Token</button></td>' +
           "</tr>"
         );
       })
       .join("");
+  }
+
+  async function queueUSBCommand(laptopID, block) {
+    const endpoint = "/api/v1/laptops/" + laptopID + (block ? "/usb/block" : "/usb/unblock");
+    await apiRequest(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    setMessage(el.laptopMessage, block ? "USB block command queued." : "USB unblock command queued.", false);
+    await loadLaptops();
   }
 
   function getDepartmentName(id) {
@@ -710,6 +727,49 @@
     createLaptop().catch(function (err) {
       setMessage(el.laptopMessage, err.message || "Failed to create laptop", true);
     });
+  });
+
+  el.laptopTableBody.addEventListener("click", function (event) {
+    const button = event.target.closest("button[data-action]");
+    if (!button) {
+      return;
+    }
+    const action = button.getAttribute("data-action");
+    if (action === "copy-token") {
+      const token = button.getAttribute("data-token") || "";
+      if (!token) {
+        setMessage(el.laptopMessage, "Agent token is missing for this laptop.", true);
+        return;
+      }
+      navigator.clipboard.writeText(token).then(function () {
+        setMessage(el.laptopMessage, "Agent token copied.", false);
+      }).catch(function () {
+        setMessage(el.laptopMessage, "Copy failed. Please copy token manually.", true);
+      });
+      return;
+    }
+
+    const laptopID = button.getAttribute("data-id");
+    if (!laptopID) {
+      return;
+    }
+    if (action === "usb-block") {
+      if (!window.confirm("Queue USB storage block command for this laptop?")) {
+        return;
+      }
+      queueUSBCommand(laptopID, true).catch(function (err) {
+        setMessage(el.laptopMessage, err.message || "Failed to queue USB block", true);
+      });
+      return;
+    }
+    if (action === "usb-unblock") {
+      if (!window.confirm("Queue USB storage unblock command for this laptop?")) {
+        return;
+      }
+      queueUSBCommand(laptopID, false).catch(function (err) {
+        setMessage(el.laptopMessage, err.message || "Failed to queue USB unblock", true);
+      });
+    }
   });
 
   el.assignType.addEventListener("change", toggleAssignmentInputs);

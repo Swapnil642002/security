@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"firewall-manager/internal/models"
@@ -10,6 +12,7 @@ import (
 )
 
 var ErrFleetForbidden = errors.New("admin access required")
+var ErrAgentUnauthorized = errors.New("invalid agent token")
 
 type FleetService struct {
 	fleetRepo *repository.FleetRepository
@@ -104,6 +107,69 @@ func (s *FleetService) ListPolicyAssignments(ctx context.Context, actorUserID, p
 		return nil, err
 	}
 	return s.fleetRepo.ListPolicyAssignments(ctx, policyID)
+}
+
+func (s *FleetService) QueueUSBCommand(ctx context.Context, actorUserID, laptopID int64, block bool) (models.DeviceCommand, error) {
+	if err := s.ensureAdmin(ctx, actorUserID); err != nil {
+		return models.DeviceCommand{}, err
+	}
+	laptop, err := s.fleetRepo.GetLaptopByID(ctx, laptopID)
+	if err != nil {
+		return models.DeviceCommand{}, err
+	}
+
+	commandType := "usb.unblock"
+	action := "usb.unblock"
+	if block {
+		commandType = "usb.block"
+		action = "usb.block"
+	}
+
+	payload, _ := json.Marshal(map[string]any{"hostname": laptop.Hostname})
+	created, err := s.fleetRepo.CreateDeviceCommand(ctx, models.DeviceCommand{
+		LaptopID:    laptop.ID,
+		CommandType: commandType,
+		PayloadJSON: string(payload),
+		CreatedBy:   actorUserID,
+	})
+	if err != nil {
+		return models.DeviceCommand{}, err
+	}
+
+	_ = s.fleetRepo.InsertAuditLog(ctx, actorUserID, action, "employee_laptop", laptop.ID, map[string]any{
+		"hostname": laptop.Hostname,
+		"command":  commandType,
+	})
+	return created, nil
+}
+
+func (s *FleetService) AgentClaimNextCommand(ctx context.Context, agentToken string) (*models.DeviceCommand, error) {
+	agentToken = strings.TrimSpace(agentToken)
+	if agentToken == "" {
+		return nil, ErrAgentUnauthorized
+	}
+	cmd, err := s.fleetRepo.ClaimNextPendingCommand(ctx, agentToken)
+	if err != nil {
+		return nil, err
+	}
+	return cmd, nil
+}
+
+func (s *FleetService) AgentReportCommandResult(ctx context.Context, agentToken string, commandID int64, success bool, resultText string) error {
+	agentToken = strings.TrimSpace(agentToken)
+	if agentToken == "" {
+		return ErrAgentUnauthorized
+	}
+	if commandID <= 0 {
+		return fmt.Errorf("invalid command id")
+	}
+	if err := s.fleetRepo.CompleteClaimedCommand(ctx, agentToken, commandID, success, resultText); err != nil {
+		if errors.Is(err, repository.ErrLaptopNotFound) {
+			return ErrAgentUnauthorized
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *FleetService) ensureAdmin(ctx context.Context, actorUserID int64) error {

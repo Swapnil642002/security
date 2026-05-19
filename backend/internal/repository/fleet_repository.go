@@ -2,15 +2,21 @@ package repository
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"firewall-manager/internal/models"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+var ErrLaptopNotFound = errors.New("laptop not found")
 
 type FleetRepository struct {
 	pool *pgxpool.Pool
@@ -54,7 +60,7 @@ func (r *FleetRepository) CreateDepartment(ctx context.Context, name, descriptio
 func (r *FleetRepository) ListLaptops(ctx context.Context) ([]models.EmployeeLaptop, error) {
 	const q = `
 		SELECT id, hostname, employee_name, employee_email, os_type, department_id,
-		       is_active, last_seen_at, created_at, updated_at
+		       is_active, usb_storage_blocked, COALESCE(agent_token, ''), last_seen_at, created_at, updated_at
 		FROM employee_laptops
 		ORDER BY hostname ASC`
 	rows, err := r.pool.Query(ctx, q)
@@ -74,6 +80,8 @@ func (r *FleetRepository) ListLaptops(ctx context.Context) ([]models.EmployeeLap
 			&l.OSType,
 			&l.DepartmentID,
 			&l.IsActive,
+			&l.USBStorageBlocked,
+			&l.AgentToken,
 			&l.LastSeenAt,
 			&l.CreatedAt,
 			&l.UpdatedAt,
@@ -86,11 +94,19 @@ func (r *FleetRepository) ListLaptops(ctx context.Context) ([]models.EmployeeLap
 }
 
 func (r *FleetRepository) CreateLaptop(ctx context.Context, l models.EmployeeLaptop) (models.EmployeeLaptop, error) {
+	if strings.TrimSpace(l.AgentToken) == "" {
+		token, err := randomAgentToken(24)
+		if err != nil {
+			return models.EmployeeLaptop{}, err
+		}
+		l.AgentToken = token
+	}
+
 	const q = `
-		INSERT INTO employee_laptops (hostname, employee_name, employee_email, os_type, department_id, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO employee_laptops (hostname, employee_name, employee_email, os_type, department_id, is_active, usb_storage_blocked, agent_token)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, hostname, employee_name, employee_email, os_type, department_id,
-		          is_active, last_seen_at, created_at, updated_at`
+		          is_active, usb_storage_blocked, COALESCE(agent_token, ''), last_seen_at, created_at, updated_at`
 	var out models.EmployeeLaptop
 	err := r.pool.QueryRow(
 		ctx,
@@ -101,6 +117,8 @@ func (r *FleetRepository) CreateLaptop(ctx context.Context, l models.EmployeeLap
 		l.OSType,
 		l.DepartmentID,
 		l.IsActive,
+		l.USBStorageBlocked,
+		strings.TrimSpace(l.AgentToken),
 	).Scan(
 		&out.ID,
 		&out.Hostname,
@@ -109,6 +127,8 @@ func (r *FleetRepository) CreateLaptop(ctx context.Context, l models.EmployeeLap
 		&out.OSType,
 		&out.DepartmentID,
 		&out.IsActive,
+		&out.USBStorageBlocked,
+		&out.AgentToken,
 		&out.LastSeenAt,
 		&out.CreatedAt,
 		&out.UpdatedAt,
@@ -117,9 +137,17 @@ func (r *FleetRepository) CreateLaptop(ctx context.Context, l models.EmployeeLap
 }
 
 func (r *FleetRepository) UpsertLaptopByHostname(ctx context.Context, l models.EmployeeLaptop) (models.EmployeeLaptop, error) {
+	if strings.TrimSpace(l.AgentToken) == "" {
+		token, err := randomAgentToken(24)
+		if err != nil {
+			return models.EmployeeLaptop{}, err
+		}
+		l.AgentToken = token
+	}
+
 	const q = `
-		INSERT INTO employee_laptops (hostname, employee_name, employee_email, os_type, department_id, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO employee_laptops (hostname, employee_name, employee_email, os_type, department_id, is_active, usb_storage_blocked, agent_token)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (hostname)
 		DO UPDATE
 		SET employee_name = EXCLUDED.employee_name,
@@ -127,9 +155,10 @@ func (r *FleetRepository) UpsertLaptopByHostname(ctx context.Context, l models.E
 		    os_type = EXCLUDED.os_type,
 		    department_id = EXCLUDED.department_id,
 		    is_active = EXCLUDED.is_active,
+		    agent_token = COALESCE(employee_laptops.agent_token, EXCLUDED.agent_token),
 		    updated_at = NOW()
 		RETURNING id, hostname, employee_name, employee_email, os_type, department_id,
-		          is_active, last_seen_at, created_at, updated_at`
+		          is_active, usb_storage_blocked, COALESCE(agent_token, ''), last_seen_at, created_at, updated_at`
 
 	var out models.EmployeeLaptop
 	err := r.pool.QueryRow(
@@ -141,6 +170,8 @@ func (r *FleetRepository) UpsertLaptopByHostname(ctx context.Context, l models.E
 		l.OSType,
 		l.DepartmentID,
 		l.IsActive,
+		l.USBStorageBlocked,
+		strings.TrimSpace(l.AgentToken),
 	).Scan(
 		&out.ID,
 		&out.Hostname,
@@ -149,10 +180,40 @@ func (r *FleetRepository) UpsertLaptopByHostname(ctx context.Context, l models.E
 		&out.OSType,
 		&out.DepartmentID,
 		&out.IsActive,
+		&out.USBStorageBlocked,
+		&out.AgentToken,
 		&out.LastSeenAt,
 		&out.CreatedAt,
 		&out.UpdatedAt,
 	)
+	return out, err
+}
+
+func (r *FleetRepository) GetLaptopByID(ctx context.Context, laptopID int64) (models.EmployeeLaptop, error) {
+	const q = `
+		SELECT id, hostname, employee_name, employee_email, os_type, department_id,
+		       is_active, usb_storage_blocked, COALESCE(agent_token, ''), last_seen_at, created_at, updated_at
+		FROM employee_laptops
+		WHERE id = $1`
+
+	var out models.EmployeeLaptop
+	err := r.pool.QueryRow(ctx, q, laptopID).Scan(
+		&out.ID,
+		&out.Hostname,
+		&out.EmployeeName,
+		&out.EmployeeEmail,
+		&out.OSType,
+		&out.DepartmentID,
+		&out.IsActive,
+		&out.USBStorageBlocked,
+		&out.AgentToken,
+		&out.LastSeenAt,
+		&out.CreatedAt,
+		&out.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return models.EmployeeLaptop{}, ErrLaptopNotFound
+	}
 	return out, err
 }
 
@@ -181,6 +242,138 @@ func (r *FleetRepository) SetLaptopActive(ctx context.Context, laptopID int64, i
 		WHERE id = $2`
 	_, err := r.pool.Exec(ctx, q, isActive, laptopID)
 	return err
+}
+
+func (r *FleetRepository) CreateDeviceCommand(ctx context.Context, cmd models.DeviceCommand) (models.DeviceCommand, error) {
+	const q = `
+		INSERT INTO device_commands (laptop_id, command_type, payload_json, status, created_by)
+		VALUES ($1, $2, $3::jsonb, 'pending', $4)
+		RETURNING id, laptop_id, command_type, payload_json::text, status, result_text,
+		          created_by, started_at, completed_at, created_at, updated_at`
+
+	var out models.DeviceCommand
+	err := r.pool.QueryRow(ctx, q, cmd.LaptopID, cmd.CommandType, nonEmptyJSON(cmd.PayloadJSON), cmd.CreatedBy).Scan(
+		&out.ID,
+		&out.LaptopID,
+		&out.CommandType,
+		&out.PayloadJSON,
+		&out.Status,
+		&out.ResultText,
+		&out.CreatedBy,
+		&out.StartedAt,
+		&out.CompletedAt,
+		&out.CreatedAt,
+		&out.UpdatedAt,
+	)
+	return out, err
+}
+
+func (r *FleetRepository) ClaimNextPendingCommand(ctx context.Context, agentToken string) (*models.DeviceCommand, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	const pick = `
+		SELECT dc.id
+		FROM device_commands dc
+		JOIN employee_laptops el ON el.id = dc.laptop_id
+		WHERE el.agent_token = $1
+		  AND dc.status = 'pending'
+		ORDER BY dc.created_at ASC
+		LIMIT 1
+		FOR UPDATE SKIP LOCKED`
+
+	var commandID int64
+	err = tx.QueryRow(ctx, pick, strings.TrimSpace(agentToken)).Scan(&commandID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	const claim = `
+		UPDATE device_commands
+		SET status = 'in_progress', started_at = NOW(), updated_at = NOW()
+		WHERE id = $1
+		RETURNING id, laptop_id, command_type, payload_json::text, status, result_text,
+		          created_by, started_at, completed_at, created_at, updated_at`
+
+	var out models.DeviceCommand
+	if err := tx.QueryRow(ctx, claim, commandID).Scan(
+		&out.ID,
+		&out.LaptopID,
+		&out.CommandType,
+		&out.PayloadJSON,
+		&out.Status,
+		&out.ResultText,
+		&out.CreatedBy,
+		&out.StartedAt,
+		&out.CompletedAt,
+		&out.CreatedAt,
+		&out.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	return &out, nil
+}
+
+func (r *FleetRepository) CompleteClaimedCommand(ctx context.Context, agentToken string, commandID int64, success bool, resultText string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	status := "failed"
+	if success {
+		status = "success"
+	}
+
+	const complete = `
+		UPDATE device_commands dc
+		SET status = $1,
+		    result_text = $2,
+		    completed_at = NOW(),
+		    updated_at = NOW()
+		FROM employee_laptops el
+		WHERE dc.id = $3
+		  AND dc.laptop_id = el.id
+		  AND el.agent_token = $4
+		  AND dc.status IN ('pending', 'in_progress')
+		RETURNING dc.command_type, dc.laptop_id`
+
+	var commandType string
+	var laptopID int64
+	err = tx.QueryRow(ctx, complete, status, strings.TrimSpace(resultText), commandID, strings.TrimSpace(agentToken)).Scan(&commandType, &laptopID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrLaptopNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	if success {
+		blocked := false
+		if commandType == "usb.block" {
+			blocked = true
+		}
+		if _, err := tx.Exec(ctx, `UPDATE employee_laptops SET usb_storage_blocked=$1, updated_at=NOW() WHERE id=$2`, blocked, laptopID); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (r *FleetRepository) ListPolicyAssignments(ctx context.Context, policyID int64) ([]models.PolicyAssignment, error) {
@@ -224,4 +417,20 @@ func (r *FleetRepository) InsertAuditLog(ctx context.Context, actorUserID int64,
 		return fmt.Errorf("insert audit log: %w", err)
 	}
 	return nil
+}
+
+func nonEmptyJSON(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "{}"
+	}
+	return v
+}
+
+func randomAgentToken(size int) (string, error) {
+	buf := make([]byte, size)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
 }
