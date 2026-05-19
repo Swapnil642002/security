@@ -3,9 +3,12 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"firewall-manager/internal/http/middleware"
 	"firewall-manager/internal/models"
@@ -59,6 +62,7 @@ func (h *EnrollmentHandler) CreateLink(w http.ResponseWriter, r *http.Request) {
 		handleEnrollmentError(w, err)
 		return
 	}
+	linkURL = normalizePublicLink(r, linkURL)
 	writeJSON(w, http.StatusCreated, map[string]any{"item": item, "link": linkURL})
 }
 
@@ -171,4 +175,52 @@ func handleEnrollmentError(w http.ResponseWriter, err error) {
 	default:
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
+}
+
+func normalizePublicLink(r *http.Request, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return requestBaseURL(r) + "/enroll"
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+
+	if u.Host == "" {
+		if !strings.HasPrefix(raw, "/") {
+			raw = "/" + raw
+		}
+		return requestBaseURL(r) + raw
+	}
+
+	host := strings.ToLower(u.Hostname())
+	if host == "localhost" || host == "127.0.0.1" {
+		base, err := url.Parse(requestBaseURL(r))
+		if err != nil {
+			return raw
+		}
+		u.Scheme = base.Scheme
+		u.Host = base.Host
+		return u.String()
+	}
+
+	return raw
+}
+
+func requestBaseURL(r *http.Request) string {
+	proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+	if proto == "" {
+		if r.TLS != nil {
+			proto = "https"
+		} else {
+			proto = "http"
+		}
+	}
+	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
+	if host == "" {
+		host = strings.TrimSpace(r.Host)
+	}
+	return fmt.Sprintf("%s://%s", proto, host)
 }
