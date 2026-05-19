@@ -56,7 +56,7 @@ func (p *OPNsenseProvider) Sync(ctx context.Context, policies []models.FirewallP
 			"target":      policy.Target,
 		})
 		commands = append(commands, string(payload))
-		applied++
+		skipped++
 	}
 
 	warnings = append(warnings, "OPNsense sync currently runs in compatibility mode: policies are validated and prepared, but auto-push should be enabled carefully after endpoint-specific mapping is finalized.")
