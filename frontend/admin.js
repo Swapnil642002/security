@@ -230,7 +230,7 @@
 
   function renderLaptops(items) {
     if (!Array.isArray(items) || items.length === 0) {
-      el.laptopTableBody.innerHTML = '<tr><td colspan="8" class="muted">No laptops yet.</td></tr>';
+      el.laptopTableBody.innerHTML = '<tr><td colspan="9" class="muted">No laptops yet.</td></tr>';
       return;
     }
     el.laptopTableBody.innerHTML = items
@@ -254,6 +254,7 @@
           "</div></td>" +
           "<td><div style=\"font-family:monospace;font-size:0.78rem;\">" + escapeHtml(tokenShort) + "</div>" +
           '<button class="tiny-btn" data-action="copy-token" data-token="' + escapeHtml(item.agent_token || "") + '">Copy Token</button></td>' +
+          '<td><button class="tiny-btn" data-action="delete-laptop" data-id="' + item.id + '">Delete</button></td>' +
           "</tr>"
         );
       })
@@ -590,6 +591,12 @@
     await loadLaptops();
   }
 
+  async function deleteLaptop(id) {
+    await apiRequest("/api/v1/laptops/" + id, { method: "DELETE" });
+    setMessage(el.laptopMessage, "Laptop removed from management.", false);
+    await Promise.all([loadLaptops(), loadEnrollments(), loadDashboardSummary()]);
+  }
+
   async function createAssignment() {
     const type = el.assignType.value;
     const payload = {
@@ -768,6 +775,15 @@
       }
       queueUSBCommand(laptopID, false).catch(function (err) {
         setMessage(el.laptopMessage, err.message || "Failed to queue USB unblock", true);
+      });
+      return;
+    }
+    if (action === "delete-laptop") {
+      if (!window.confirm("Delete this laptop from company management? This removes policy assignment and command history for that device.")) {
+        return;
+      }
+      deleteLaptop(laptopID).catch(function (err) {
+        setMessage(el.laptopMessage, err.message || "Failed to delete laptop", true);
       });
     }
   });

@@ -217,6 +217,60 @@ func (r *FleetRepository) GetLaptopByID(ctx context.Context, laptopID int64) (mo
 	return out, err
 }
 
+func (r *FleetRepository) DeleteLaptop(ctx context.Context, laptopID int64) (models.EmployeeLaptop, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return models.EmployeeLaptop{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	const getQ = `
+		SELECT id, hostname, employee_name, employee_email, os_type, department_id,
+		       is_active, usb_storage_blocked, COALESCE(agent_token, ''), last_seen_at, created_at, updated_at
+		FROM employee_laptops
+		WHERE id = $1
+		FOR UPDATE`
+
+	var out models.EmployeeLaptop
+	if err := tx.QueryRow(ctx, getQ, laptopID).Scan(
+		&out.ID,
+		&out.Hostname,
+		&out.EmployeeName,
+		&out.EmployeeEmail,
+		&out.OSType,
+		&out.DepartmentID,
+		&out.IsActive,
+		&out.USBStorageBlocked,
+		&out.AgentToken,
+		&out.LastSeenAt,
+		&out.CreatedAt,
+		&out.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.EmployeeLaptop{}, ErrLaptopNotFound
+		}
+		return models.EmployeeLaptop{}, err
+	}
+
+	if _, err := tx.Exec(ctx, `UPDATE device_enrollments SET laptop_id = NULL, updated_at = NOW() WHERE laptop_id = $1`, laptopID); err != nil {
+		return models.EmployeeLaptop{}, err
+	}
+
+	deleteResult, err := tx.Exec(ctx, `DELETE FROM employee_laptops WHERE id = $1`, laptopID)
+	if err != nil {
+		return models.EmployeeLaptop{}, err
+	}
+	if deleteResult.RowsAffected() == 0 {
+		return models.EmployeeLaptop{}, ErrLaptopNotFound
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return models.EmployeeLaptop{}, err
+	}
+
+	return out, nil
+}
+
 func (r *FleetRepository) CreatePolicyAssignment(ctx context.Context, a models.PolicyAssignment) (models.PolicyAssignment, error) {
 	const q = `
 		INSERT INTO policy_assignments (policy_id, assignment_type, department_id, laptop_id, is_enabled)

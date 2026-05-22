@@ -62,6 +62,7 @@ func New(authHandler *handlers.AuthHandler, dashboardHandler *handlers.Dashboard
 			protected.Post("/departments", fleetHandler.CreateDepartment)
 			protected.Get("/laptops", fleetHandler.ListLaptops)
 			protected.Post("/laptops", fleetHandler.CreateLaptop)
+			protected.Delete("/laptops/{laptopID}", fleetHandler.DeleteLaptop)
 			protected.Post("/laptops/{laptopID}/usb/block", fleetHandler.QueueUSBBlock)
 			protected.Post("/laptops/{laptopID}/usb/unblock", fleetHandler.QueueUSBUnblock)
 			protected.Post("/policy-assignments", fleetHandler.CreatePolicyAssignment)

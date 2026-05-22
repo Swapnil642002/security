@@ -74,6 +74,27 @@ func (s *FleetService) CreateLaptop(ctx context.Context, actorUserID int64, lapt
 	return created, nil
 }
 
+func (s *FleetService) DeleteLaptop(ctx context.Context, actorUserID, laptopID int64) (models.EmployeeLaptop, error) {
+	if err := s.ensureAdmin(ctx, actorUserID); err != nil {
+		return models.EmployeeLaptop{}, err
+	}
+	if laptopID <= 0 {
+		return models.EmployeeLaptop{}, errors.New("invalid laptop id")
+	}
+
+	deleted, err := s.fleetRepo.DeleteLaptop(ctx, laptopID)
+	if err != nil {
+		return models.EmployeeLaptop{}, err
+	}
+
+	_ = s.fleetRepo.InsertAuditLog(ctx, actorUserID, "laptop.delete", "employee_laptop", deleted.ID, map[string]any{
+		"hostname": deleted.Hostname,
+		"email":    deleted.EmployeeEmail,
+	})
+
+	return deleted, nil
+}
+
 func (s *FleetService) CreatePolicyAssignment(ctx context.Context, actorUserID int64, assignment models.PolicyAssignment) (models.PolicyAssignment, error) {
 	if err := s.ensureAdmin(ctx, actorUserID); err != nil {
 		return models.PolicyAssignment{}, err

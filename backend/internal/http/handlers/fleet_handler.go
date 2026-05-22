@@ -129,6 +129,28 @@ func (h *FleetHandler) CreateLaptop(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"item": item})
 }
 
+func (h *FleetHandler) DeleteLaptop(w http.ResponseWriter, r *http.Request) {
+	actorUserID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	laptopID, err := strconv.ParseInt(chi.URLParam(r, "laptopID"), 10, 64)
+	if err != nil || laptopID <= 0 {
+		http.Error(w, "invalid laptop id", http.StatusBadRequest)
+		return
+	}
+
+	item, err := h.fleetSvc.DeleteLaptop(r.Context(), actorUserID, laptopID)
+	if err != nil {
+		handleFleetError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"item": item, "deleted": true})
+}
+
 func (h *FleetHandler) CreatePolicyAssignment(w http.ResponseWriter, r *http.Request) {
 	actorUserID, ok := middleware.UserIDFromContext(r.Context())
 	if !ok {
