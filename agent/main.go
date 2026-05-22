@@ -13,9 +13,9 @@ import (
 )
 
 type Command struct {
-	ID          int64                  `json:"id"`
-	CommandType string                 `json:"command_type"`
-	Payload     map[string]interface{} `json:"payload_json"`
+	ID          int64  `json:"id"`
+	CommandType string `json:"command_type"`
+	Payload     string `json:"payload_json"`
 }
 
 type Config struct {
@@ -83,7 +83,7 @@ func reportResult(cfg Config, cmdID int64, success bool, resultText string) erro
 func blockUSB() error {
 	switch runtime.GOOS {
 	case "windows":
-		cmd := exec.Command("powershell", "-Command", "Set-ItemProperty -Path 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\USBSTOR' -Name Start -Value 4")
+		cmd := exec.Command("powershell", "-Command", "$path='Registry::HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\USBSTOR'; if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }; New-ItemProperty -Path $path -Name Start -PropertyType DWord -Value 4 -Force | Out-Null")
 		return cmd.Run()
 	case "linux":
 		cmd := exec.Command("modprobe", "-r", "usb_storage")
@@ -98,7 +98,7 @@ func blockUSB() error {
 func unblockUSB() error {
 	switch runtime.GOOS {
 	case "windows":
-		cmd := exec.Command("powershell", "-Command", "Set-ItemProperty -Path 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\USBSTOR' -Name Start -Value 3")
+		cmd := exec.Command("powershell", "-Command", "$path='Registry::HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\USBSTOR'; if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }; New-ItemProperty -Path $path -Name Start -PropertyType DWord -Value 3 -Force | Out-Null")
 		return cmd.Run()
 	case "linux":
 		cmd := exec.Command("modprobe", "usb_storage")
