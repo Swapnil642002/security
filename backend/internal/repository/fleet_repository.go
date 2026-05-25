@@ -289,6 +289,75 @@ func (r *FleetRepository) CreatePolicyAssignment(ctx context.Context, a models.P
 	return out, err
 }
 
+func (r *FleetRepository) GetPolicyByID(ctx context.Context, policyID int64) (models.FirewallPolicy, error) {
+	const q = `
+		SELECT id, name, policy_type, action, target, COALESCE(department, ''), schedule_json::text,
+		       is_enabled, created_by, created_at, updated_at
+		FROM firewall_policies
+		WHERE id = $1`
+
+	var p models.FirewallPolicy
+	err := r.pool.QueryRow(ctx, q, policyID).Scan(
+		&p.ID,
+		&p.Name,
+		&p.PolicyType,
+		&p.Action,
+		&p.Target,
+		&p.Department,
+		&p.ScheduleJSON,
+		&p.IsEnabled,
+		&p.CreatedBy,
+		&p.CreatedAt,
+		&p.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return models.FirewallPolicy{}, ErrPolicyNotFound
+	}
+	return p, err
+}
+
+func (r *FleetRepository) ListActiveLaptopIDsForAssignment(ctx context.Context, a models.PolicyAssignment) ([]int64, error) {
+	if a.AssignmentType == "laptop" && a.LaptopID != nil {
+		const q = `SELECT id FROM employee_laptops WHERE id = $1 AND is_active = TRUE`
+		rows, err := r.pool.Query(ctx, q, *a.LaptopID)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		items := make([]int64, 0, 1)
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				return nil, err
+			}
+			items = append(items, id)
+		}
+		return items, rows.Err()
+	}
+
+	if a.AssignmentType == "department" && a.DepartmentID != nil {
+		const q = `SELECT id FROM employee_laptops WHERE department_id = $1 AND is_active = TRUE ORDER BY id ASC`
+		rows, err := r.pool.Query(ctx, q, *a.DepartmentID)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		items := make([]int64, 0)
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				return nil, err
+			}
+			items = append(items, id)
+		}
+		return items, rows.Err()
+	}
+
+	return nil, nil
+}
+
 func (r *FleetRepository) SetLaptopActive(ctx context.Context, laptopID int64, isActive bool) error {
 	const q = `
 		UPDATE employee_laptops

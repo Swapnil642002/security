@@ -116,6 +116,9 @@ func (s *FleetService) CreatePolicyAssignment(ctx context.Context, actorUserID i
 	if err != nil {
 		return models.PolicyAssignment{}, err
 	}
+	if err := s.queueWebsiteCategoryCommandsForAssignment(ctx, actorUserID, created); err != nil {
+		return models.PolicyAssignment{}, err
+	}
 	_ = s.fleetRepo.InsertAuditLog(ctx, actorUserID, "policy.assign", "policy_assignment", created.ID, map[string]any{
 		"policy_id":       created.PolicyID,
 		"assignment_type": created.AssignmentType,
@@ -201,5 +204,54 @@ func (s *FleetService) ensureAdmin(ctx context.Context, actorUserID int64) error
 	if !u.IsActive || u.Role != "admin" {
 		return ErrFleetForbidden
 	}
+	return nil
+}
+
+func (s *FleetService) queueWebsiteCategoryCommandsForAssignment(ctx context.Context, actorUserID int64, assignment models.PolicyAssignment) error {
+	policy, err := s.fleetRepo.GetPolicyByID(ctx, assignment.PolicyID)
+	if err != nil {
+		return err
+	}
+	if policy.PolicyType != "website_category" {
+		return nil
+	}
+
+	laptopIDs, err := s.fleetRepo.ListActiveLaptopIDsForAssignment(ctx, assignment)
+	if err != nil {
+		return err
+	}
+	if len(laptopIDs) == 0 {
+		return nil
+	}
+
+	commandType := "website.unblock_category"
+	if policy.Action == "block" && policy.IsEnabled && assignment.IsEnabled {
+		commandType = "website.block_category"
+	}
+
+	payloadBytes, _ := json.Marshal(map[string]any{
+		"category":    policy.Target,
+		"policy_id":   policy.ID,
+		"policy_name": policy.Name,
+	})
+
+	for _, laptopID := range laptopIDs {
+		if _, err := s.fleetRepo.CreateDeviceCommand(ctx, models.DeviceCommand{
+			LaptopID:    laptopID,
+			CommandType: commandType,
+			PayloadJSON: string(payloadBytes),
+			CreatedBy:   actorUserID,
+		}); err != nil {
+			return err
+		}
+	}
+
+	_ = s.fleetRepo.InsertAuditLog(ctx, actorUserID, "policy.assign.command_queue", "firewall_policy", policy.ID, map[string]any{
+		"assignment_id": assignment.ID,
+		"command_type":  commandType,
+		"target_count":  len(laptopIDs),
+		"category":      policy.Target,
+	})
+
 	return nil
 }
