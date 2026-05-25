@@ -2,6 +2,14 @@ package models
 
 import "time"
 
+// validWebsiteCategories are the categories that the firewall engine supports.
+var validWebsiteCategories = map[string]struct{}{
+	"social_media":    {},
+	"video_streaming": {},
+	"shopping":        {},
+	"entertainment":   {},
+}
+
 type FirewallPolicy struct {
 	ID           int64     `json:"id"`
 	Name         string    `json:"name"`
@@ -25,6 +33,11 @@ func (p FirewallPolicy) Validate() bool {
 	}
 	if p.Action != "allow" && p.Action != "block" {
 		return false
+	}
+	if p.PolicyType == "website_category" {
+		if _, ok := validWebsiteCategories[p.Target]; !ok {
+			return false
+		}
 	}
 	if p.ScheduleJSON == "" {
 		return false

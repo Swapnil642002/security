@@ -110,6 +110,136 @@ func unblockUSB() error {
 	}
 }
 
+// websiteBlockCategories lists domains per category for hosts-file blocking.
+var websiteBlockCategories = map[string][]string{
+	"social_media": {
+		"facebook.com", "www.facebook.com",
+		"x.com", "twitter.com", "www.twitter.com",
+		"instagram.com", "www.instagram.com",
+		"tiktok.com", "www.tiktok.com",
+		"snapchat.com", "www.snapchat.com",
+		"linkedin.com", "www.linkedin.com",
+		"reddit.com", "www.reddit.com",
+		"pinterest.com", "www.pinterest.com",
+		"tumblr.com", "www.tumblr.com",
+		"discord.com", "www.discord.com",
+		"telegram.org", "web.telegram.org",
+	},
+	"video_streaming": {
+		"youtube.com", "www.youtube.com", "youtu.be",
+		"netflix.com", "www.netflix.com",
+		"primevideo.com", "www.primevideo.com",
+		"hotstar.com", "www.hotstar.com",
+		"jiocinema.com", "www.jiocinema.com",
+		"hulu.com", "www.hulu.com",
+		"disneyplus.com", "www.disneyplus.com",
+		"twitch.tv", "www.twitch.tv",
+		"vimeo.com", "www.vimeo.com",
+		"dailymotion.com", "www.dailymotion.com",
+		"zee5.com", "www.zee5.com",
+		"sonyliv.com", "www.sonyliv.com",
+		"mxplayer.in", "www.mxplayer.in",
+	},
+	"shopping": {
+		"amazon.com", "www.amazon.com",
+		"amazon.in", "www.amazon.in",
+		"flipkart.com", "www.flipkart.com",
+		"myntra.com", "www.myntra.com",
+		"ebay.com", "www.ebay.com",
+		"alibaba.com", "www.alibaba.com",
+		"aliexpress.com", "www.aliexpress.com",
+		"snapdeal.com", "www.snapdeal.com",
+		"meesho.com", "www.meesho.com",
+		"ajio.com", "www.ajio.com",
+		"nykaa.com", "www.nykaa.com",
+	},
+	"entertainment": {
+		"spotify.com", "open.spotify.com",
+		"soundcloud.com", "www.soundcloud.com",
+		"crunchyroll.com", "www.crunchyroll.com",
+		"gaana.com", "www.gaana.com",
+		"jiosaavn.com", "www.jiosaavn.com",
+		"wynk.in", "www.wynk.in",
+	},
+}
+
+func hostsFilePath() string {
+	if runtime.GOOS == "windows" {
+		return `C:\Windows\System32\drivers\etc\hosts`
+	}
+	return "/etc/hosts"
+}
+
+const hostsBlockTag = "# firewall-agent-block"
+
+// blockWebsiteCategory appends 0.0.0.0 entries for every domain in the category
+// into the system hosts file. Each line is tagged so they can be removed later.
+func blockWebsiteCategory(category string) error {
+	domains, ok := websiteBlockCategories[category]
+	if !ok {
+		return fmt.Errorf("unknown category %q", category)
+	}
+
+	path := hostsFilePath()
+	existing, err := ioutil.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read hosts file: %w", err)
+	}
+
+	var sb strings.Builder
+	for _, domain := range domains {
+		marker := fmt.Sprintf("%s:%s", hostsBlockTag, domain)
+		if strings.Contains(string(existing), marker) {
+			continue // already blocked
+		}
+		sb.WriteString(fmt.Sprintf("0.0.0.0 %s %s\n", domain, marker))
+	}
+
+	if sb.Len() == 0 {
+		return nil // nothing new to add
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("open hosts file: %w", err)
+	}
+	defer f.Close()
+	_, err = f.WriteString(sb.String())
+	return err
+}
+
+// unblockWebsiteCategory removes hosts-file entries that were added by blockWebsiteCategory.
+func unblockWebsiteCategory(category string) error {
+	if _, ok := websiteBlockCategories[category]; !ok {
+		return fmt.Errorf("unknown category %q", category)
+	}
+
+	path := hostsFilePath()
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read hosts file: %w", err)
+	}
+
+	var kept []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.Contains(line, hostsBlockTag) {
+			taggedCategory := false
+			for _, domain := range websiteBlockCategories[category] {
+				if strings.Contains(line, hostsBlockTag+":"+domain) {
+					taggedCategory = true
+					break
+				}
+			}
+			if taggedCategory {
+				continue
+			}
+		}
+		kept = append(kept, line)
+	}
+
+	return ioutil.WriteFile(path, []byte(strings.Join(kept, "\n")), 0644)
+}
+
 func main() {
 	cfg, err := loadConfig()
 	if err != nil {
@@ -142,6 +272,30 @@ func main() {
 					result = "USB unblocked"
 				} else {
 					result = err.Error()
+				}
+			case "website.block_category":
+				var payload struct {
+					Category string `json:"category"`
+				}
+				if err := json.Unmarshal([]byte(cmd.Payload), &payload); err != nil {
+					result = "invalid payload: " + err.Error()
+				} else if err := blockWebsiteCategory(payload.Category); err != nil {
+					result = err.Error()
+				} else {
+					success = true
+					result = fmt.Sprintf("category %q blocked via hosts file", payload.Category)
+				}
+			case "website.unblock_category":
+				var payload struct {
+					Category string `json:"category"`
+				}
+				if err := json.Unmarshal([]byte(cmd.Payload), &payload); err != nil {
+					result = "invalid payload: " + err.Error()
+				} else if err := unblockWebsiteCategory(payload.Category); err != nil {
+					result = err.Error()
+				} else {
+					success = true
+					result = fmt.Sprintf("category %q unblocked from hosts file", payload.Category)
 				}
 			default:
 				result = "Unknown command type"
