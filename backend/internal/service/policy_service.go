@@ -34,8 +34,7 @@ func (s *PolicyService) Create(ctx context.Context, actorUserID int64, p models.
 	if err := s.ensureAdmin(ctx, actorUserID); err != nil {
 		return models.FirewallPolicy{}, err
 	}
-	p.Name = strings.TrimSpace(p.Name)
-	p.Target = strings.TrimSpace(p.Target)
+	normalizePolicyInput(&p)
 	if !p.Validate() {
 		return models.FirewallPolicy{}, ErrInvalidPolicy
 	}
@@ -57,8 +56,7 @@ func (s *PolicyService) Update(ctx context.Context, actorUserID, policyID int64,
 	if err := s.ensureAdmin(ctx, actorUserID); err != nil {
 		return models.FirewallPolicy{}, err
 	}
-	p.Name = strings.TrimSpace(p.Name)
-	p.Target = strings.TrimSpace(p.Target)
+	normalizePolicyInput(&p)
 	if !p.Validate() {
 		return models.FirewallPolicy{}, ErrInvalidPolicy
 	}
@@ -95,4 +93,18 @@ func (s *PolicyService) ensureAdmin(ctx context.Context, actorUserID int64) erro
 		return ErrPolicyForbidden
 	}
 	return nil
+}
+
+func normalizePolicyInput(p *models.FirewallPolicy) {
+	p.Name = strings.TrimSpace(p.Name)
+	p.PolicyType = strings.ToLower(strings.TrimSpace(p.PolicyType))
+	p.Action = strings.ToLower(strings.TrimSpace(p.Action))
+	p.Target = strings.TrimSpace(p.Target)
+
+	if p.PolicyType == "website_category" {
+		target := strings.ToLower(p.Target)
+		target = strings.ReplaceAll(target, "-", "_")
+		target = strings.Join(strings.Fields(target), "_")
+		p.Target = target
+	}
 }

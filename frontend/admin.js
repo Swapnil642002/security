@@ -307,12 +307,26 @@
     el.policyPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function normalizeWebsiteCategoryTarget(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/-/g, "_")
+      .replace(/\s+/g, "_");
+  }
+
   function collectPolicyPayload() {
+    const policyType = (el.policyType.value || "").trim().toLowerCase();
+    const rawTarget = el.policyTarget.value.trim();
+    const normalizedTarget = policyType === "website_category"
+      ? normalizeWebsiteCategoryTarget(rawTarget)
+      : rawTarget;
+
     return {
       name: el.policyName.value.trim(),
-      policy_type: el.policyType.value,
-      action: el.policyAction.value,
-      target: el.policyTarget.value.trim(),
+      policy_type: policyType,
+      action: (el.policyAction.value || "").trim().toLowerCase(),
+      target: normalizedTarget,
       department: el.policyDepartment.value.trim(),
       schedule_json: (el.policySchedule.value || "{}").trim() || "{}",
       is_enabled: el.policyEnabled.value === "true",
