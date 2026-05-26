@@ -360,6 +360,124 @@
     const resp = await apiRequest("/api/v1/dashboard/summary");
     const body = await resp.json();
     const summary = body.summary || {};
+    // --- Block All Except Entertainment & WhatsApp ---
+    // List of all known categories (should match backend)
+    const ALL_CATEGORIES = [
+      "social_media",
+      "video_streaming",
+      "shopping",
+      "entertainment"
+      // Add more if backend supports more
+    ];
+
+    // WhatsApp is not a category, but a domain under social_media. We'll handle it specially.
+    const WHATSAPP_DOMAINS = ["whatsapp.com", "www.whatsapp.com"];
+
+    // Helper: Create or update a block policy for a category
+    async function createBlockPolicyForCategory(category) {
+      const payload = {
+        name: `Block ${category.replace(/_/g, ' ')}`,
+        policy_type: "website_category",
+        action: "block",
+        target: category,
+        department: "",
+        schedule_json: "{}",
+        is_enabled: true
+      };
+      try {
+        await apiRequest("/api/v1/policies", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      } catch (e) {
+        // Ignore duplicate or error for now
+      }
+    }
+
+    // Helper: Create an allow policy for WhatsApp (if not already allowed)
+    async function createAllowPolicyForWhatsApp() {
+      // WhatsApp is not a category, so we need to create a custom policy for its domains
+      // This assumes your backend supports domain-based policies, otherwise document for backend devs
+      for (const domain of WHATSAPP_DOMAINS) {
+        const payload = {
+          name: `Allow WhatsApp (${domain})`,
+          policy_type: "website_category", // or a custom type if supported
+          action: "allow",
+          target: domain,
+          department: "",
+          schedule_json: "{}",
+          is_enabled: true
+        };
+        try {
+          await apiRequest("/api/v1/policies", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+        } catch (e) {
+          // Ignore duplicate or error for now
+        }
+      }
+    }
+
+    // Main handler for the new button
+    async function handleBlockAllExceptEW() {
+      if (!confirm("Are you sure you want to block all categories except Entertainment & WhatsApp? This will overwrite existing policies.")) {
+        return;
+      }
+      // Block all except entertainment
+      for (const cat of ALL_CATEGORIES) {
+        if (cat !== "entertainment") {
+          await createBlockPolicyForCategory(cat);
+        }
+      }
+      // Allow WhatsApp
+      await createAllowPolicyForWhatsApp();
+      alert("Policies updated. Please refresh to see changes.");
+      // Optionally reload policies
+      if (typeof loadPolicies === "function") {
+        await loadPolicies();
+      }
+    }
+
+    // Attach event listener after DOM is loaded
+    document.addEventListener("DOMContentLoaded", function () {
+      const btn = document.getElementById("block-all-except-ew");
+      if (btn) {
+        btn.addEventListener("click", handleBlockAllExceptEW);
+      }
+      // --- Block All USB Storage Devices ---
+      const usbBtn = document.getElementById("block-all-usb");
+      if (usbBtn) {
+        usbBtn.addEventListener("click", async function () {
+          if (!confirm("Are you sure you want to block USB storage on ALL laptops? This will queue a block command for every device.")) {
+            return;
+          }
+          // Load all laptops (state.laptops should be up to date)
+          if (!Array.isArray(state.laptops) || state.laptops.length === 0) {
+            alert("No laptops found.");
+            return;
+          }
+          let failed = 0;
+          for (const laptop of state.laptops) {
+            try {
+              await queueUSBCommand(laptop.id, true);
+            } catch (e) {
+              failed++;
+            }
+          }
+          if (failed === 0) {
+            alert("USB block command queued for all laptops.");
+          } else {
+            alert(`USB block command queued, but ${failed} failed. Check logs for details.`);
+          }
+          if (typeof loadLaptops === "function") {
+            await loadLaptops();
+          }
+        });
+      }
+    });
 
     const provider = titleCase(summary.firewall_provider || "not_configured");
     el.metricProvider.textContent = provider;
