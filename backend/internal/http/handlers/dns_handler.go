@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"firewall/backend/internal/dnsfilter"
+	"firewall-manager/internal/dnsfilter"
 )
 
 type BlockCategoryRequest struct {
